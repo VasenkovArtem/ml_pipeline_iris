@@ -7,17 +7,27 @@ import seaborn as sns
 import yaml
 import mlflow
 
-from lib.train import load_dict, save_dict, METRICS
+from lib.utils import (
+    parse_config,    
+    load_dict,
+    save_dict,
+    load_model,
+    log_results,
+    METRICS,
+    LOG_MODEL
+)
+
+mlflow.set_tracking_uri('http://158.160.11.51:90/')
+mlflow.set_experiment('vasenkov_hw')
 
 def eval():
-    with open('params.yaml', 'r') as f:
-        params_data = yaml.safe_load(f)
+    config = parse_config('eval')
 
-    config = params_data['eval']
-    with open('data/train/model.pkl', 'rb') as f:
-        model = pickle.load(f)
+    data = load_dict('data/prepare/data.json')
+    model_type = data['model_type']
 
-    data = load_dict('data/train/data.json')
+    model = load_model(model_type)
+
     preds = model.predict(data['test_x'])
 
     if not os.path.exists('data/eval'):
@@ -39,9 +49,12 @@ def eval():
     print(f'eval params - {params}')
     print(f'eval metrics - {metrics}')
 
-    mlflow.log_params(params)
-    mlflow.log_metrics(metrics)
-
+    log_results(
+        params=params,
+        metrics=metrics,
+        report=(data['test_y'], preds),
+        artifact='data/eval/heatmap.png',
+        model=(model_type, model))
 
 if __name__ == '__main__':
     eval()

@@ -1,92 +1,64 @@
-import json
 import os
-import pickle
 import random
-from functools import partial
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import yaml
-from sklearn import datasets
+
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score
+
 import mlflow
 
+from lib.utils import (
+    parse_config,
+    log_results,
+    save_dict,
+    save_model,
+    METRICS,
+    MODELS,
+    LOG_MODEL
+)
+
+
 mlflow.set_tracking_uri('http://158.160.11.51:90/')
-mlflow.set_experiment('aaa_test_size_exp')
+mlflow.set_experiment('vasenkov_hw')
 
 RANDOM_SEED = 1
 
 random.seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 
-METRICS = {
-    'recall': partial(recall_score, average='macro'),
-    'precision': partial(precision_score, average='macro'),
-    'accuracy': accuracy_score,
-}
-
-
-def save_dict(data: dict, filename: str):
-    with open(filename, 'w') as f:
-        json.dump(data, f)
-
-
-def load_dict(filename: str):
-    with open(filename, 'r') as f:
-        return json.load(f)
-
-
-def train_model(x, y):
-    model = DecisionTreeClassifier()
+def train_model(model, x, y):
     model.fit(x, y)
-    return model
-
 
 def train():
-    with open('params.yaml', 'rb') as f:
-        params_data = yaml.safe_load(f)
+    config = parse_config('train')
+    model_type = config['model']
 
-    config = params_data['train']
-
-    iris = datasets.load_iris()
     task_dir = 'data/train'
 
-    x = iris['data'].tolist()
-    y = iris['target'].tolist()
+    data = load_dict('data/prepare/data.json')
+    train_x, test_x, train_y, test_y = data['train_x'], data['test_x'], data['train_y'], data['test_y']
 
-    train_x, test_x, train_y, test_y = train_test_split(x, y, test_size=config['test_size'])
+    model = MODELS[model_type]()
+    train_model(model, train_x, train_y)
+    preds = model.predict(train_x + test_x)
 
-    model = train_model(train_x, train_y)
-
-    preds = model.predict(x)
+    save_data = {
+        'model_type': model_type,
+    }
+    save_dict(save_data, os.path.join(task_dir, 'data.json'))
 
     metrics = {}
     for metric_name in params_data['eval']['metrics']:
-        metrics[metric_name] = METRICS[metric_name](y, preds)
-
-    save_data = {
-        'train_x': train_x,
-        'test_x': test_x,
-        'train_y': train_y,
-        'test_y': test_y,
-    }
-
-    if not os.path.exists(task_dir):
-        os.mkdir(task_dir)
-
-    save_dict(save_data, os.path.join(task_dir, 'data.json'))
+        metrics[metric_name] = METRICS[metric_name](train_y + test_y, preds)
     save_dict(metrics, os.path.join(task_dir, 'metrics.json'))
 
     sns.heatmap(pd.DataFrame(train_x).corr())
-
     plt.savefig('data/train/heatmap.png')
 
-    with open('data/train/model.pkl', 'wb') as f:
-        pickle.dump(model, f)
+    save_model(model_type, model)
 
     params = {}
     for i in params_data.values():
@@ -97,9 +69,12 @@ def train():
     print(f'train params - {params}')
     print(f'train metrics - {metrics}')
 
-    mlflow.log_params(params)
-    mlflow.log_metrics(metrics)
-
+    log_results(
+        params=params,
+        metrics=metrics,
+        report=(y, preds),
+        artifact='data/train/heatmap.png',
+        model=(model_type, model))
 
 if __name__ == '__main__':
     train()
