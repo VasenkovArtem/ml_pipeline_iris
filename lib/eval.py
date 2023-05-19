@@ -1,10 +1,8 @@
 import os.path
-import pickle
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import yaml
 import mlflow
 
 from lib.utils import (
@@ -13,37 +11,40 @@ from lib.utils import (
     save_dict,
     load_model,
     log_results,
-    METRICS,
-    LOG_MODEL
+    METRICS
 )
 
+# если оставить только в train.py, eval stage не логируется (
 mlflow.set_tracking_uri('http://158.160.11.51:90/')
 mlflow.set_experiment('vasenkov_hw')
 
 def eval():
     config = parse_config('eval')
 
-    data = load_dict('data/prepare/data.json')
-    model_type = data['model_type']
+    data_prepare = load_dict('data/prepare/data.json')
+
+    data_train = load_dict('data/train/data.json')
+    model_type = data_train['model_type']
 
     model = load_model(model_type)
 
-    preds = model.predict(data['test_x'])
+    preds = model.predict(data_prepare['test_x'])
 
     if not os.path.exists('data/eval'):
         os.mkdir('data/eval')
 
     metrics = {}
     for metric_name in config['metrics']:
-        metrics[metric_name] = METRICS[metric_name](data['test_y'], preds)
+        metrics[metric_name] = METRICS[metric_name](data_prepare['test_y'],
+                                                    preds)
 
     save_dict(metrics, 'data/metrics.json')
 
-    sns.heatmap(pd.DataFrame(data['test_x']).corr())
+    sns.heatmap(pd.DataFrame(data_prepare['test_x']).corr())
     plt.savefig('data/eval/heatmap.png')
 
     params = {'run_type': 'eval'}
-    for i in params_data.values():
+    for i in parse_config().values():
         params.update(i)
 
     print(f'eval params - {params}')
@@ -52,9 +53,10 @@ def eval():
     log_results(
         params=params,
         metrics=metrics,
-        report=(data['test_y'], preds),
+        report=(data_prepare['test_y'], preds),
         artifact='data/eval/heatmap.png',
-        model=(model_type, model))
+        model=(model_type, model)
+    )
 
 if __name__ == '__main__':
     eval()

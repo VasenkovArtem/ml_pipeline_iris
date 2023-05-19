@@ -19,7 +19,12 @@ from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 
 from functools import partial
-from sklearn.metrics import accuracy_score, precision_score, recall_score, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    classification_report
+)
 
 import mlflow
 from mlflow.sklearn import log_model as log_sklearn
@@ -66,10 +71,10 @@ LOG_MODEL = {
 }
 
 
-def parse_config(stage: str) -> dict:
+def parse_config(stage: str = None) -> dict:
     with open('params.yaml', 'r') as f:
         params_data = yaml.safe_load(f)
-    return params_data[stage]
+    return params_data[stage] if stage else params_data
 
 def save_dict(data: dict, filename: str):
     with open(filename, 'w') as f:
@@ -98,9 +103,9 @@ def load_model(model_type: str):
     with open('data/train/model.pkl', 'rb') as f:
         model = pickle.load(f)
     return model
-    
 
-def log_results(params=None, metrics=None, report=None, artifact=None, model=None):
+def log_results(params=None, metrics=None, report=None, artifact=None,
+                model=None):
     if params:
         mlflow.log_params(params)
     if metrics:
@@ -112,10 +117,11 @@ def log_results(params=None, metrics=None, report=None, artifact=None, model=Non
             'info/classification_report.txt'
         )
         mlflow.log_dict(
-            classification_report(*report, target_names=target_names, output_dict=True),
+            classification_report(*report, target_names=target_names,
+                                  output_dict=True),
             'info/classification_report.json'
         )
     if artifact:
-        mlflow.log_artifact('data/train/heatmap.png', artifact_path='info')
+        mlflow.log_artifact(artifact, artifact_path='info')
     if model:
         LOG_MODEL[model[0]](model[1], artifact_path='model')
