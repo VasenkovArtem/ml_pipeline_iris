@@ -10,6 +10,14 @@ DAG_ID = 'test'
 def get_config_value(task_id: str, key: str):
     return f'{{{{task_instance.xcom_pull(task_ids="{task_id}", key="{key}")}}}}'
 
+class Command:
+    DEFAULT_COMMAND = 'dvc exp run'
+
+    def get_command(params: dict) -> str:
+        command = DEFAULT_COMMAND.copy()
+        for key, value in params.items():
+            command += f' -S {key}={value}'
+        return command
 
 class Key:
     TASK_INSTANCE_KEY = 'ti'  # xcom object
@@ -19,7 +27,8 @@ class Key:
 
 
 class ConfigPusher:
-    DEFAULT_CONFIG = {'command': 'dvc repro', 'MLFLOW_TRACKING_URI': 'http://51.250.108.121:90/'}
+    DEFAULT_CONFIG = {'command': Command.DEFAULT_COMMAND,
+                      'MLFLOW_TRACKING_URI': 'http://51.250.108.121:90/'}
 
     def prepare_default(self, dag_run) -> dict:
         return {}
@@ -33,9 +42,14 @@ class ConfigPusher:
 
         default_config = self.DEFAULT_CONFIG.copy()
         config = {
-            key: dag_config[key] if key in dag_config else default_value
-            for key, default_value in default_config.items()
-        }
+                key: dag_config[key] if key in dag_config else default_value
+                for key, default_value in default_config.items()
+            }
+        # перезатрём command, если заданы параметры
+        if 'params' in dag_config:
+            command = Command.get_command(dag_config['params'])
+            config['command'] = command
+
         for key, value in sorted(config.items()):
             task_instance.xcom_push(key=key, value=value)
 
